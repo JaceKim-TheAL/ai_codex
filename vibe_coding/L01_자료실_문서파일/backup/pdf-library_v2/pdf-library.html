@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF 자료실</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#edf3f8;color:#14283d;font:16px/1.55 system-ui,sans-serif}
+header{background:#14283d;color:white;padding:24px clamp(16px,4vw,56px);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+h1,h2,p{margin:0} h1{font-size:28px} h2{font-size:17px;margin-top:24px}
+header p{color:#d4e3ef}
+main{display:grid;grid-template-columns:minmax(245px,330px) minmax(0,1fr);gap:18px;padding:clamp(12px,3vw,36px)}
+aside,article{background:white;border:1px solid #d7e2eb;border-radius:14px;padding:16px;min-width:0}
+button,select,.link{font:inherit;padding:8px 12px;border:1px solid #b8cbdc;border-radius:8px;background:white;color:#14283d}
+button,.link{cursor:pointer} button:disabled{cursor:default;opacity:.55}
+#pick{background:#176489;color:white;border-color:#176489;font-weight:700}
+select{width:100%;margin-top:8px} ul{list-style:none;margin:8px 0 0;padding:0}
+li+li{margin-top:6px} li button{width:100%;text-align:left;overflow-wrap:anywhere}
+li button[aria-current=true]{background:#dceff9;border-color:#176489}
+#path,#status,#title{overflow-wrap:anywhere} #path{margin-top:10px;font-weight:700}
+#status{font-size:14px;margin-top:8px;color:#405970}
+.reader-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+iframe{display:block;width:100%;height:74vh;border:1px solid #d7e2eb;border-radius:8px}
+[hidden]{display:none!important}
+@media(max-width:680px){main{grid-template-columns:1fr}iframe{height:70vh}}
+#markdown{overflow-wrap:anywhere;color:#24384a}
+#markdown :is(h1,h2,h3,h4,h5,h6,p,ol,ul,blockquote,pre){margin:0 0 14px}
+#markdown ul{list-style:disc}
+#markdown :is(ul,ol){padding-left:26px}
+#markdown pre{padding:14px;background:#eef3f7;border-radius:8px;overflow:auto}
+#markdown blockquote{padding-left:14px;border-left:4px solid #b8cbdc}
+#markdown :not(pre)>code{background:#eef3f7;padding:2px 4px;border-radius:4px}
+</style>
+</head>
+<body>
+<header><div><h1>PDF 자료실</h1><p>폴더를 선택하고 PDF를 열어 보세요.</p></div><button id="pick" type="button">자료 폴더 선택</button>
+<input id="upload" type="file" webkitdirectory multiple hidden></header>
+<main>
+<aside aria-label="폴더 및 PDF 탐색">
+<button id="back" type="button" disabled>← 이전</button>
+<p id="path">선택한 폴더 없음</p>
+<p id="status" role="status"></p>
+<h2><label for="folders">하위 폴더</label></h2>
+<select id="folders" disabled><option>폴더를 선택하세요</option></select>
+<h2>PDF 파일 <span id="count"></span></h2>
+<ul id="files"></ul><p id="empty">자료 폴더를 먼저 선택하세요.</p>
+<h2>Markdown 파일 <span id="md-count"></span></h2>
+<ul id="md-files"></ul><p id="md-empty">자료 폴더를 먼저 선택하세요.</p>
+</aside>
+<article aria-label="문서 미리보기">
+<div class="reader-head"><strong id="title">문서 미리보기</strong><a class="link" id="external" target="_blank" rel="noopener" hidden>새 탭에서 열기</a></div>
+<p id="hint">목록에서 파일을 누르면 여기에 표시됩니다.</p>
+<iframe id="viewer" title="PDF 문서" hidden></iframe>
+<section id="markdown" aria-label="Markdown 문서" hidden></section>
+</article>
+</main>
+<script>
+'use strict';
+const byId = id => document.getElementById(id);
+const pick = byId('pick'), upload = byId('upload'), back = byId('back');
+const folders = byId('folders'), files = byId('files'), status = byId('status');
+const mdFiles = byId('md-files'), markdown = byId('markdown');
+const isMarkdown = name => /\.(md|markdown)$/i.test(name);
+const viewer = byId('viewer'), external = byId('external');
+const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
+let trail = [], previewUrl, navigation = 0, previewRequest = 0;
+
+function clearPreview() {
+  previewRequest++;
+  viewer.hidden = external.hidden = markdown.hidden = true;
+  markdown.replaceChildren();
+  viewer.removeAttribute('src');
+  external.removeAttribute('href');
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = undefined;
+  byId('hint').hidden = false;
+  byId('title').textContent = '문서 미리보기';
+  document.querySelector('li button[aria-current]')?.removeAttribute('aria-current');
+}
+
+async function openPdf(entry, button) {
+  clearPreview();
+  const request = previewRequest;
+  status.textContent = '';
+  try {
+    const file = entry.url ? null : await entry.getFile();
+    if (request !== previewRequest) return;
+    if (file) previewUrl = URL.createObjectURL(new Blob([file], {type: 'application/pdf'}));
+    viewer.src = external.href = entry.url || previewUrl;
+    viewer.hidden = external.hidden = false;
+    byId('hint').hidden = true;
+    byId('title').textContent = entry.name;
+    button.setAttribute('aria-current', 'true');
+  } catch (error) {
+    if (request === previewRequest) status.textContent = 'PDF를 열 수 없습니다. 파일이 이동되었는지 확인해 주세요.';
+  }
+}
+
+async function show(nextTrail) {
+  const request = ++navigation;
+  const folder = nextTrail.at(-1);
+  status.textContent = '폴더를 읽는 중입니다.';
+  back.disabled = folders.disabled = true;
+  let entries;
+  try {
+    entries = [];
+    for await (const entry of (await folder.values())) entries.push(entry);
+  } catch (error) {
+    if (request !== navigation) return;
+    back.disabled = trail.length < 2;
+    folders.disabled = folders.options.length < 2;
+    status.textContent = '폴더를 읽을 수 없습니다. 폴더 위치와 접근 권한을 확인해 주세요.';
+    return;
+  }
+  if (request !== navigation) return;
+  trail = nextTrail;
+  clearPreview();
+  entries.sort((a,b) => collator.compare(a.name,b.name));
+  const children = entries.filter(entry => entry.kind === 'directory');
+  const pdfs = entries.filter(entry => entry.kind === 'file' && /\.pdf$/i.test(entry.name));
+  folders.replaceChildren(new Option(children.length ? '하위 폴더 선택' : '하위 폴더 없음', ''));
+  children.forEach((entry, index) => folders.add(new Option(entry.name, index)));
+  folders.onchange = () => {
+    if (folders.value === '') return;
+    const child = children[Number(folders.value)];
+    folders.value = '';
+    show([...trail, child]);
+  };
+  folders.disabled = !children.length;
+  back.disabled = trail.length < 2;
+  byId('path').textContent = trail.map(entry => entry.name).join(' / ');
+  byId('count').textContent = pdfs.length + '개';
+  byId('empty').textContent = '이 폴더에는 PDF 파일이 없습니다.';
+  byId('empty').hidden = pdfs.length > 0;
+  renderFiles(files, pdfs, openPdf);
+  const md = entries.filter(entry => entry.kind === 'file' && isMarkdown(entry.name));
+  byId('md-count').textContent = md.length + '개';
+  byId('md-empty').textContent = '이 폴더에는 Markdown 파일이 없습니다.';
+  byId('md-empty').hidden = md.length > 0;
+  renderFiles(mdFiles, md, openMarkdown);
+  status.textContent = '';
+}
+
+function renderFiles(list, entries, open) {
+  list.replaceChildren(...entries.map(entry => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = entry.name;
+    button.onclick = () => open(entry, button);
+    item.append(button);
+    return item;
+  }));
+}
+
+function inlineText(node, text) {
+  const tokens = /(\x60[^\x60]+\x60|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/gi;
+  let offset = 0;
+  for (const match of text.matchAll(tokens)) {
+    const token = match[0];
+    node.append(text.slice(offset, match.index));
+    let element;
+    if (token.startsWith('[')) {
+      const split = token.lastIndexOf('](');
+      element = document.createElement('a');
+      element.href = token.slice(split + 2, -1);
+      element.target = '_blank';
+      element.rel = 'noopener noreferrer';
+      element.textContent = token.slice(1, split);
+    } else {
+      const strong = token.startsWith('**');
+      const trim = strong ? 2 : 1;
+      element = document.createElement(strong ? 'strong' : token.startsWith('*') ? 'em' : 'code');
+      element.textContent = token.slice(trim, -trim);
+    }
+    node.append(element);
+    offset = match.index + token.length;
+  }
+  node.append(text.slice(offset));
+}
+
+function renderMarkdown(source) {
+  const output = document.createDocumentFragment();
+  let fence, code, list, paragraph;
+  for (const line of source.replace(/^\uFEFF/, '').split(/\r\n?|\n/)) {
+    const marker = /^\s*(\x60{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length &&
+          !line.slice(marker[0].length).trim()) {
+        fence = undefined;
+      } else {
+        code.append(line + '\n');
+      }
+      continue;
+    }
+    const item = /^\s*(?:([-+*])|(\d+)[.)])\s+(.+)$/.exec(line);
+    if (item) {
+      paragraph = undefined;
+      const tag = item[2] ? 'OL' : 'UL';
+      if (list?.tagName !== tag) {
+        list = document.createElement(tag);
+        if (item[2]) list.start = Number(item[2]);
+        output.append(list);
+      }
+      const li = document.createElement('li');
+      inlineText(li, item[3]);
+      list.append(li);
+      continue;
+    }
+    list = undefined;
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    const quote = /^\s*>\s?(.*)$/.exec(line);
+    if (marker || heading || quote || !line.trim()) paragraph = undefined;
+    if (marker) {
+      fence = marker[1];
+      const pre = document.createElement('pre');
+      code = document.createElement('code');
+      pre.append(code);
+      output.append(pre);
+    } else if (heading || quote) {
+      const block = document.createElement(heading ? 'h' + heading[1].length : 'blockquote');
+      inlineText(block, heading ? heading[2] : quote[1]);
+      output.append(block);
+    } else if (line.trim()) {
+      if (paragraph) paragraph.append(' ');
+      else {
+        paragraph = document.createElement('p');
+        output.append(paragraph);
+      }
+      inlineText(paragraph, line.trim());
+    }
+  }
+  markdown.replaceChildren(output);
+}
+
+async function openMarkdown(entry, button) {
+  clearPreview();
+  const request = previewRequest;
+  status.textContent = '';
+  try {
+    const response = entry.url ? await fetch(entry.url) : await entry.getFile();
+    if (entry.url && !response.ok) throw new Error('Markdown unavailable');
+    const source = await response.text();
+    if (request !== previewRequest) return;
+    renderMarkdown(source);
+    markdown.hidden = false;
+    byId('hint').hidden = true;
+    byId('title').textContent = entry.name;
+    button.setAttribute('aria-current', 'true');
+  } catch (error) {
+    if (request === previewRequest) status.textContent = 'Markdown 파일을 열 수 없습니다.';
+  }
+}
+
+function importedFolder(name) {
+  const entries = new Map();
+  return { name, entries, kind: 'directory', values: () => entries.values() };
+}
+
+upload.onchange = () => {
+  const selected = Array.from(upload.files);
+  upload.value = '';
+  if (!selected.length) return;
+  const root = importedFolder(selected[0].webkitRelativePath.split('/')[0]);
+  for (const file of selected) {
+    const parts = file.webkitRelativePath.split('/').slice(1);
+    const filename = parts.pop();
+    let folder = root;
+    for (const name of parts) {
+      if (!folder.entries.has(name)) folder.entries.set(name, importedFolder(name));
+      folder = folder.entries.get(name);
+    }
+    folder.entries.set(filename, { name: filename, kind: 'file', getFile: () => file });
+  }
+  show([root]);
+};
+
+pick.onclick = async () => {
+  if (!window.showDirectoryPicker) {
+    upload.click();
+    return;
+  }
+  try {
+    const root = await window.showDirectoryPicker({mode:'read'});
+    await show([root]);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    status.textContent = '폴더 선택 권한을 확인하거나 다시 선택해 주세요.';
+    upload.click();
+  }
+};
+back.onclick = () => {
+  if (trail.length > 1) show(trail.slice(0, -1));
+};
+function serverFolder(name, path) {
+  return {
+    name,
+    kind: 'directory',
+    async values() {
+      const response = await fetch('/api/folder?' + new URLSearchParams({path}));
+      if (!response.ok) throw new Error('Folder unavailable');
+      const data = await response.json();
+      if (!path) this.name = data.root;
+      return data.entries.map(entry => {
+        const childPath = path ? path + '/' + entry.name : entry.name;
+        if (entry.kind === 'directory') return serverFolder(entry.name, childPath);
+        const route = isMarkdown(entry.name) ? 'markdown' : 'pdf';
+        return { ...entry, url: '/api/' + route + '?' + new URLSearchParams({path: childPath}) };
+      });
+    }
+  };
+}
+if (location.protocol === 'http:' && location.hostname === '127.0.0.1') {
+  show([serverFolder('자료 폴더', '')]);
+} else {
+  status.textContent = '현재 폴더를 자동으로 표시하려면 start-pdf-library.cmd를 실행하세요. 이 화면에서는 자료 폴더를 직접 선택할 수 있습니다.';
+}
+
+</script>
+</body>
+</html>
+

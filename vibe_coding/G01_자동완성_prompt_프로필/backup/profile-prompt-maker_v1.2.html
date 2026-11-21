@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 프로필 사진 프롬프트 만들기</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f2e7;color:#243b31;font:16px/1.6 system-ui,"Malgun Gothic",sans-serif}main{max-width:1080px;margin:auto;padding:clamp(18px,5vw,52px)}header{border-bottom:1px solid #c9d0bd;margin-bottom:24px;padding-bottom:16px}h1{font-size:clamp(27px,5vw,47px);line-height:1.2;letter-spacing:-.05em;margin:0 0 10px}p{margin:0;color:#4e6156}h2{font-size:19px;line-height:1.3;margin:0 0 12px}.row{display:flex;flex-wrap:wrap;gap:8px}.layout{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-top:16px;align-items:start}.panel{background:#fffdf6;border:1px solid #d4dacb;border-radius:18px;padding:clamp(14px,3vw,24px)}button{border:1px solid #a5b8a6;border-radius:9px;background:#e7eee3;color:#254135;font:inherit;font-size:14px;font-weight:600;min-height:44px;padding:7px 13px;cursor:pointer}button[aria-pressed=true],.primary{background:#345d47;border-color:#345d47;color:white}button:focus-visible,textarea:focus-visible{outline:3px solid #a36b23;outline-offset:2px}.group+.group{margin-top:15px}.group h3{margin:0 0 6px;font-size:14px}.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.bar h2{margin:0}textarea{margin:14px 0 10px;display:block;width:100%;min-height:232px;resize:vertical;padding:14px;border:1px solid #c4cebe;border-radius:10px;background:#f9f8ef;color:#243b31;font:inherit}#status{font-size:14px}.actions{margin-top:12px;align-items:center}#hint{margin-top:10px;font-size:14px}section:has(#result){position:sticky;top:14px}#preset{margin-bottom:14px}#preset[hidden]{display:none}@media(max-width:700px){.layout{grid-template-columns:1fr}section:has(#result){position:static}textarea{min-height:170px}}
+</style>
+<main>
+<header><h1>AI 프로필 사진 프롬프트 만들기</h1><p>작업과 옵션을 선택하고 프롬프트를 복사하세요.</p></header>
+<section class="panel"><h2>작업 선택</h2><div id="modes" class="row" role="group" aria-label="작업 선택"></div></section>
+<div class="layout">
+<section class="panel"><h2>옵션</h2><button id="preset">강사 프로필 예시 적용</button><div id="options"></div></section>
+<section class="panel">
+<div class="bar"><h2><label for="result">완성된 프롬프트</label></h2><div class="row" id="languages" role="group" aria-label="프롬프트 언어"></div></div>
+<textarea id="result" readonly></textarea>
+<div class="row actions"><button class="primary" id="copy">복사</button><span id="status" role="status"></span></div>
+<p id="hint"></p>
+</section>
+</div>
+</main>
+<script>
+"use strict";
+const modes = {
+  new: "새 프로필 사진 만들기", pose: "포즈 변경", expression: "표정 변경",
+  background: "배경 바꾸기", style: "스타일 변경", lighting: "조명 변경", mood: "분위기 변경", ratio: "사진 비율 변경", framing: "구도 변경"
+};
+const groups = {
+  use: ["용도", "Use", [
+    ["인스타그램", "Instagram"], ["비즈니스", "business profile"], ["카카오톡", "KakaoTalk"], ["GPT 아이콘", "GPT icon"]
+  ]],
+  subject: ["아이콘 소재", "Subject", [
+    ["인물", "portrait"], ["펼쳐진 책", "an open book"], ["펜", "a pen"], ["노트와 펜", "a notebook and pen"]
+  ]],
+  pose: ["포즈", "Pose", [
+    ["정면", "facing the camera"], ["살짝 옆모습", "slight three-quarter angle"], ["노트북으로 작업 중", "working on a laptop"]
+  ]],
+  expression: ["표정", "Expression", [
+    ["자연스러운 미소", "natural smile"], ["밝은 웃음", "bright laugh"], ["차분한 표정", "calm expression"]
+  ]],
+  background: ["배경", "Background", [
+    ["크림색 단색", "solid cream"], ["밝은 사무실", "bright office"], ["자연광 스튜디오", "studio with natural light"]
+  ]],
+  style: ["스타일", "Style", [
+    ["실사", "photorealistic"], ["캐리커처", "caricature"], ["연필 스케치", "pencil sketch"], ["미니멀 아이콘", "minimal icon"]
+  ]]
+};
+Object.assign(groups, {
+  "lighting": [
+    "조명",
+    "Lighting",
+    [
+      [
+        "미지정",
+        "Unspecified"
+      ],
+      [
+        "얼굴이 밝고 깨끗하게 보이는 부드러운 조명",
+        "soft light that illuminates the face clearly and evenly"
+      ],
+      [
+        "그림자가 강하지 않은 스튜디오 조명",
+        "studio lighting with gentle shadows"
+      ],
+      [
+        "자연스럽고 화사한 피부 표현",
+        "naturally bright skin rendering with skin texture preserved"
+      ]
+    ]
+  ],
+  "mood": [
+    "분위기",
+    "Mood",
+    [
+      [
+        "미지정",
+        "Unspecified"
+      ],
+      [
+        "전문적",
+        "professional"
+      ],
+      [
+        "세련됨",
+        "refined"
+      ],
+      [
+        "부드럽고 호감 가는 분위기",
+        "warm and approachable"
+      ]
+    ]
+  ],
+  "ratio": [
+    "사진 비율",
+    "Aspect ratio",
+    [
+      [
+        "1:1 정사각형",
+        "1:1 square"
+      ],
+      [
+        "3:4 세로형",
+        "3:4 portrait"
+      ],
+      [
+        "4:5 세로형",
+        "4:5 portrait"
+      ]
+    ]
+  ],
+  "framing": [
+    "촬영 범위",
+    "Framing",
+    [
+      [
+        "미지정",
+        "Unspecified"
+      ],
+      [
+        "얼굴·어깨 중심",
+        "head and shoulders"
+      ],
+      [
+        "상반신",
+        "upper body"
+      ],
+      [
+        "허벅지까지 보이는 미디엄 숏",
+        "medium shot framed down to the thighs"
+      ]
+    ]
+  ],
+  "placement": [
+    "인물 배치",
+    "Placement",
+    [
+      [
+        "중앙 배치",
+        "centered"
+      ],
+      [
+        "미지정",
+        "Unspecified"
+      ]
+    ]
+  ],
+  "headroom": [
+    "머리 위 여백",
+    "Headroom",
+    [
+      [
+        "미지정",
+        "Unspecified"
+      ],
+      [
+        "머리 위 여백을 적당히 좁게",
+        "modest headroom without cropping the head"
+      ]
+    ]
+  ]
+});
+const extraOptions = {
+  "use": [
+    [
+      "강사 프로필",
+      "instructor profile"
+    ],
+    [
+      "강의계획서·소개서",
+      "course outline or professional introduction"
+    ],
+    [
+      "포스터·홍보물",
+      "poster or promotional material"
+    ],
+    [
+      "SNS·블로그 프로필",
+      "social media or blog profile"
+    ],
+    [
+      "퍼스널 브랜딩",
+      "personal branding"
+    ]
+  ],
+  "pose": [
+    [
+      "허리에 손을 가볍게 올린 자세",
+      "confident stance with one hand resting lightly at the waist"
+    ],
+    [
+      "상체를 살짝 틀고 서기",
+      "stand naturally with the torso turned slightly"
+    ],
+    [
+      "정면보다 약간 사선으로 서기",
+      "stand at a slight diagonal to the camera"
+    ],
+    [
+      "편안한 스탠딩 포즈",
+      "relaxed standing pose with natural shoulders"
+    ]
+  ],
+  "expression": [
+    [
+      "편안하고 안정적인 표정",
+      "relaxed, composed expression"
+    ],
+    [
+      "부담스럽지 않은 밝은 표정",
+      "bright yet understated expression"
+    ]
+  ],
+  "style": [
+    [
+      "깔끔한 스튜디오 프로필",
+      "clean studio portrait"
+    ],
+    [
+      "전문 강사·컨설턴트 스타일",
+      "professional instructor or consultant portrait"
+    ],
+    [
+      "단정하고 신뢰감 있는 퍼스널 브랜딩",
+      "polished and trustworthy personal branding portrait"
+    ]
+  ]
+};
+for (const [key, options] of Object.entries(extraOptions)) groups[key][2].push(...options);
+
+const preserved = {
+  pose: ["인물의 정체성과 얼굴 특징, 표정, 의상, 배경, 색감과 전체 스타일", "the person's identity and facial features, expression, outfit, background, color palette, and overall style"],
+  expression: ["인물의 정체성과 얼굴 특징, 포즈, 의상, 배경, 구도와 전체 스타일", "the person's identity and facial features, pose, outfit, background, framing, and overall style"],
+  background: ["인물의 얼굴, 포즈, 표정, 의상, 구도와 전체 스타일", "the person's face, pose, expression, outfit, framing, and overall style"],
+  style: ["원본의 인물이나 소재, 인물의 정체성과 얼굴 특징, 포즈, 표정, 의상, 배경 요소와 구도", "the original subject, any person's identity and facial features, pose, expression, outfit, background elements, and composition"]
+};
+const defaults = Object.fromEntries(Object.keys(groups).map(key => [key, 0]));
+const selections = {new:{...defaults}};
+for (const key of Object.keys(modes).filter(key => key !== "new")) {
+  selections[key] = {...defaults};
+}
+Object.assign(selections, {
+  lighting: {...defaults, lighting:1},
+  mood: {...defaults, mood:1},
+  framing: {...defaults, framing:2},
+  ratio: {...defaults, ratio:2}
+});
+const preset = {use:4, pose:4, expression:0, background:0, style:5, lighting:2, mood:1, ratio:2, framing:3, headroom:1};
+const unspecified = new Set(["lighting", "mood", "framing", "headroom"]);
+let mode = "new";
+let language = 0;
+const byId = id => document.getElementById(id);
+const result = byId("result");
+const status = byId("status");
+
+function addButton(parent, label, selected, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.setAttribute("aria-pressed", String(selected));
+  button.addEventListener("click", () => {
+    onClick();
+    const updated = [...document.querySelectorAll("button[aria-pressed=true]")]
+      .find(item => item.textContent === label);
+    updated?.focus();
+  });
+  parent.append(button);
+}
+
+function render() {
+  const choice = selections[mode];
+  const value = key => groups[key][2][choice[key]][language];
+  const icon = mode === "new" && choice.use === 3;
+  const objectIcon = icon && choice.subject > 0;
+  const optionKeys = mode === "new"
+    ? ["use", ...(icon ? ["subject"] : []), ...(objectIcon ? [] : ["pose", "expression"]), "background", "style",
+       ...(objectIcon ? [] : ["lighting"]), "mood", ...(icon ? [] : ["ratio"]),
+       ...(objectIcon ? [] : ["framing"]), "placement", ...(objectIcon ? [] : ["headroom"])]
+    : mode === "framing" ? ["framing", "placement", "headroom"] : [mode];
+  byId("preset").hidden = mode !== "new";
+
+  byId("modes").replaceChildren();
+  for (const [key, label] of Object.entries(modes)) {
+    addButton(byId("modes"), label, key === mode, () => { mode = key; render(); });
+  }
+
+  byId("languages").replaceChildren();
+  ["한국어", "English"].forEach((label, index) => {
+    addButton(byId("languages"), label, index === language, () => { language = index; render(); });
+  });
+
+  byId("options").replaceChildren();
+  for (const key of optionKeys) {
+    const group = document.createElement("div");
+    group.className = "group";
+    const heading = document.createElement("h3");
+    heading.id = "heading-" + key;
+    heading.textContent = groups[key][0];
+    const row = document.createElement("div");
+    row.className = "row";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-labelledby", heading.id);
+    group.append(heading, row);
+    groups[key][2].forEach(([label], index) => {
+      if (mode !== "new" && unspecified.has(key) && index === 0 && key !== "headroom") return;
+      addButton(row, label, index === choice[key], () => {
+        if (key === "use" && index === 3 && choice.style === 0) choice.style = 3;
+        choice[key] = index;
+        render();
+      });
+    });
+    byId("options").append(group);
+  }
+
+  const fields = optionKeys.filter(key => key !== "use" && !(mode === "new" && key === "ratio") && !(unspecified.has(key) && choice[key] === 0) && !(key === "placement" && choice[key] === 1))
+    .map(key => groups[key][language] + ": " + value(key)).join("\n");
+  const ratio = icon ? groups.ratio[2][0][language] : value("ratio");
+  const circularCrop = icon || (choice.ratio === 0 && [0, 2, 7].includes(choice.use));
+  if (mode === "new") {
+    result.value = language
+      ? ["Create a profile image suitable for " + value("use") + ".", "Aspect ratio: " + ratio, fields, circularCrop ? "Leave enough margin for a circular crop. Omit text and logos." : "Omit text and logos."].join("\n\n")
+      : [value("use") + "에 쓸 프로필 이미지를 만들어줘.", "사진 비율: " + ratio, fields, circularCrop ? "원형으로 잘려도 잘 보이도록 여백을 남겨줘. 글자와 로고는 생략해줘." : "글자와 로고는 생략해줘."].join("\n\n");
+  } else {
+    const keep = preserved[mode] || ["인물의 정체성, 의상, 배경 등 지정한 변경과 직접 관계없는 요소", "the subject's identity, outfit, background, and other details unaffected by the requested edit"];
+    const instructions = language
+      ? [mode === "framing" ? "Edit only the composition of the attached photo." : "Edit the attached photo. Change only the " + groups[mode][1].toLowerCase() + ".", fields,
+         "Preserve " + keep[1] + ".", mode === "ratio" ? "Adjust the canvas or crop without stretching the subject." : "Keep the original aspect ratio."]
+      : ["첨부한 사진에서 아래 항목만 바꿔줘.", fields, "유지할 요소는 다음과 같아. " + keep[0] + ".",
+         mode === "ratio" ? "인물을 늘리거나 찌그러뜨리지 말고 캔버스 또는 자르기로 비율을 조정해줘." : "원본 비율을 유지해줘."];
+    result.value = instructions.join("\n\n");
+  }
+  byId("hint").textContent = mode === "new"
+    ? "복사한 프롬프트를 이미지 생성 채팅에 붙여 넣으세요."
+    : "이미지 편집 채팅에 원본 사진을 첨부하고 프롬프트를 붙여 넣으세요.";
+  result.lang = language ? "en" : "ko";
+  status.textContent = "";
+}
+
+byId("preset").addEventListener("click", () => {
+  selections.new = {...defaults, ...preset};
+  render();
+});
+
+byId("copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(result.value);
+    status.textContent = "복사했어요.";
+  } catch {
+    result.focus();
+    result.select();
+    result.setSelectionRange(0, result.value.length);
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch {}
+    status.textContent = copied ? "복사했어요." : "선택한 문장을 Ctrl+C 또는 길게 눌러 복사하세요.";
+  }
+});
+render();
+</script>
+</html>

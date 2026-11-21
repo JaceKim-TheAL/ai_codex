@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document 자료실</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#edf3f8;color:#14283d;font:16px/1.55 system-ui,sans-serif}
+header{background:#14283d;color:white;padding:24px clamp(16px,4vw,56px);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+h1,h2,p{margin:0} h1{font-size:28px} h2{font-size:17px;margin-top:24px}
+header p{color:#d4e3ef}
+main{display:grid;grid-template-columns:minmax(245px,330px) minmax(0,1fr);gap:18px;padding:clamp(12px,3vw,36px)}
+aside,article{background:white;border:1px solid #d7e2eb;border-radius:14px;padding:16px;min-width:0}
+button,select,.link{font:inherit;padding:8px 12px;border:1px solid #b8cbdc;border-radius:8px;background:white;color:#14283d}
+button,.link{cursor:pointer} button:disabled{cursor:default;opacity:.55}
+#pick{background:#176489;color:white;border-color:#176489;font-weight:700}
+select{width:100%;margin-top:8px} ul{list-style:none;margin:8px 0 0;padding:0}
+li+li{margin-top:6px} li button{width:100%;text-align:left;overflow-wrap:anywhere}
+li button[aria-current=true]{background:#dceff9;border-color:#176489}
+#path,#status,#title{overflow-wrap:anywhere} #path{margin-top:10px;font-weight:700}
+#status{font-size:14px;margin-top:8px;color:#405970}
+.reader-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+iframe{display:block;width:100%;height:74vh;border:1px solid #d7e2eb;border-radius:8px}
+[hidden]{display:none!important}
+@media(max-width:680px){main{grid-template-columns:1fr}iframe{height:70vh}}
+#path{background:#edf3f8;border-radius:6px;padding:8px 10px;font-size:14px}
+#markdown{overflow-wrap:anywhere;color:#1f2328;line-height:1.55}
+#markdown :is(h1,h2,h3,h4,h5,h6){margin:24px 0 16px;line-height:1.25;font-weight:650}
+#markdown > :first-child{margin-top:0}
+#markdown h1{font-size:2em} #markdown h2{font-size:1.5em} #markdown h3{font-size:1.25em}
+#markdown h4{font-size:1em} #markdown h5{font-size:.875em} #markdown h6{font-size:.85em;color:#59636e}
+#markdown :is(h1,h2){padding-bottom:.3em;border-bottom:1px solid #d1d9e0}
+#markdown :is(p,ol,ul,blockquote,pre,.md-table){margin:0 0 16px}
+#markdown ul{list-style:disc}
+#markdown :is(ul,ol){padding-left:26px}
+#markdown pre{padding:16px;background:#f6f8fa;border-radius:6px;overflow:auto}
+#markdown blockquote{padding-left:14px;border-left:4px solid #d1d9e0;color:#59636e}
+#markdown :not(pre)>code{background:#eff1f3;padding:2px 4px;border-radius:4px}
+#markdown a{color:#0969da}
+#markdown img{max-width:100%;object-fit:contain}
+#markdown .md-table{overflow-x:auto}
+#markdown table{border-collapse:collapse}
+#markdown :is(th,td){border:1px solid #d1d9e0;padding:6px 13px}
+#markdown tr:nth-child(even){background:#f6f8fa}
+#markdown hr{border:0;border-top:2px solid #d1d9e0;margin:24px 0}
+</style>
+</head>
+<body>
+<header><div><h1>Document 자료실</h1><p>폴더를 선택하고 문서(PDF,MD,HTML)를 열어 보세요.</p></div><button id="pick" type="button">자료 폴더 선택</button>
+<input id="upload" type="file" webkitdirectory multiple hidden></header>
+<main>
+<aside aria-label="폴더 및 PDF 탐색">
+<button id="back" type="button" disabled>← 이전</button>
+<p id="status" role="status"></p>
+<h2><label for="folders">하위 폴더</label></h2>
+<select id="folders" disabled><option>폴더를 선택하세요</option></select>
+<p id="path" aria-live="polite">선택한 폴더 없음</p>
+<h2>PDF 파일 <span id="count"></span></h2>
+<ul id="files"></ul><p id="empty">자료 폴더를 먼저 선택하세요.</p>
+<h2>Markdown 파일 <span id="md-count"></span></h2>
+<ul id="md-files"></ul><p id="md-empty">자료 폴더를 먼저 선택하세요.</p>
+<h2>HTML 파일 <span id="html-count"></span></h2>
+<ul id="html-files"></ul><p id="html-empty">자료 폴더를 먼저 선택하세요.</p>
+</aside>
+<article aria-label="문서 미리보기">
+<div class="reader-head"><strong id="title">문서 미리보기</strong><a class="link" id="external" target="_blank" rel="noopener" hidden>새 탭에서 열기</a></div>
+<p id="hint">목록에서 파일을 누르면 여기에 표시됩니다.</p>
+<iframe id="viewer" title="PDF 문서" hidden></iframe>
+<iframe id="web-viewer" title="Markdown 및 HTML 문서" sandbox="allow-same-origin" hidden></iframe>
+</article>
+</main>
+<script>
+'use strict';
+const byId = id => document.getElementById(id);
+const pick = byId('pick'), upload = byId('upload'), back = byId('back');
+const folders = byId('folders'), files = byId('files'), status = byId('status');
+const mdFiles = byId('md-files'), htmlFiles = byId('html-files');
+const webViewer = byId('web-viewer');
+const isImage = name => /\.(?:jpe?g|png|gif|webp|svg|avif|bmp|ico)$/i.test(name);
+const isHtml = name => /\.html?$/i.test(name);
+const previewPolicy = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: https: http:; font-src data:; base-uri \'none\'; form-action \'none\'">';
+const markdownStyles = document.querySelector('style').textContent
+  .split('\n').filter(line => line.startsWith('#markdown')).join('\n');
+const isMarkdown = name => /\.(md|markdown)$/i.test(name);
+const viewer = byId('viewer'), external = byId('external');
+const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
+let trail = [], previewUrl, navigation = 0, previewRequest = 0;
+
+function clearPreview() {
+  previewRequest++;
+  viewer.hidden = external.hidden = webViewer.hidden = true;
+  webViewer.onload = null;
+  webViewer.removeAttribute('srcdoc');
+  viewer.removeAttribute('src');
+  external.removeAttribute('href');
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = undefined;
+  byId('hint').hidden = false;
+  byId('title').textContent = '문서 미리보기';
+  document.querySelector('li button[aria-current]')?.removeAttribute('aria-current');
+}
+
+async function openPdf(entry, button) {
+  clearPreview();
+  const request = previewRequest;
+  status.textContent = '';
+  try {
+    const file = entry.url ? null : await entry.getFile();
+    if (request !== previewRequest) return;
+    if (file) previewUrl = URL.createObjectURL(new Blob([file], {type: 'application/pdf'}));
+    viewer.src = external.href = entry.url || previewUrl;
+    viewer.hidden = external.hidden = false;
+    byId('hint').hidden = true;
+    byId('title').textContent = entry.name;
+    button.setAttribute('aria-current', 'true');
+  } catch (error) {
+    if (request === previewRequest) status.textContent = 'PDF를 열 수 없습니다. 파일이 이동되었는지 확인해 주세요.';
+  }
+}
+
+async function show(nextTrail) {
+  const request = ++navigation;
+  const folder = nextTrail.at(-1);
+  status.textContent = '폴더를 읽는 중입니다.';
+  back.disabled = folders.disabled = true;
+  let entries;
+  try {
+    entries = [];
+    for await (const entry of (await folder.values())) entries.push(entry);
+  } catch (error) {
+    if (request !== navigation) return;
+    back.disabled = trail.length < 2;
+    folders.disabled = folders.options.length < 2;
+    status.textContent = '폴더를 읽을 수 없습니다. 폴더 위치와 접근 권한을 확인해 주세요.';
+    return;
+  }
+  if (request !== navigation) return;
+  trail = nextTrail;
+  clearPreview();
+  entries.sort((a,b) => collator.compare(a.name,b.name));
+  const children = entries.filter(entry => entry.kind === 'directory');
+  const pdfs = entries.filter(entry => entry.kind === 'file' && /\.pdf$/i.test(entry.name));
+  folders.replaceChildren(new Option(children.length ? '하위 폴더 선택' : '하위 폴더 없음', ''));
+  children.forEach((entry, index) => folders.add(new Option(entry.name, index)));
+  folders.onchange = () => {
+    if (folders.value === '') return;
+    const child = children[Number(folders.value)];
+    folders.value = '';
+    show([...trail, child]);
+  };
+  folders.disabled = !children.length;
+  back.disabled = trail.length < 2;
+  byId('path').textContent = trail.map(entry => entry.name).join(' > ');
+  byId('count').textContent = pdfs.length + '개';
+  byId('empty').textContent = '이 폴더에는 PDF 파일이 없습니다.';
+  byId('empty').hidden = pdfs.length > 0;
+  renderFiles(files, pdfs, openPdf);
+  const md = entries.filter(entry => entry.kind === 'file' && isMarkdown(entry.name));
+  byId('md-count').textContent = md.length + '개';
+  byId('md-empty').textContent = '이 폴더에는 Markdown 파일이 없습니다.';
+  byId('md-empty').hidden = md.length > 0;
+  renderFiles(mdFiles, md, (entry, button) => openWebDocument(entry, button, true));
+  const pages = entries.filter(entry => entry.kind === 'file' && isHtml(entry.name));
+  byId('html-count').textContent = pages.length + '개';
+  byId('html-empty').textContent = '이 폴더에는 HTML 파일이 없습니다.';
+  byId('html-empty').hidden = pages.length > 0;
+  renderFiles(htmlFiles, pages, openWebDocument);
+  status.textContent = '';
+}
+
+function renderFiles(list, entries, open) {
+  list.replaceChildren(...entries.map(entry => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = entry.name;
+    button.onclick = () => open(entry, button);
+    item.append(button);
+    return item;
+  }));
+}
+
+let rawHtml = [], references = new Map();
+
+function referenceKey(label) {
+  return label.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function collectReferences(lines) {
+  const definitions = new Set();
+  let fence;
+  for (const [index, line] of lines.entries()) {
+    const marker = /^ {0,3}(\x60{3,}|~{3,})(.*)$/.exec(line);
+    if (fence) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length &&
+          !marker[2].trim()) fence = undefined;
+      continue;
+    }
+    if (marker) {
+      fence = marker[1];
+      continue;
+    }
+    const definition = /^ {0,3}\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+"[^"]*")?\s*$/.exec(line);
+    const alias = /^ {0,3}([^:[\]]+):\s*\[[^\]]+\]\((https?:\/\/[^)\s]+)\)\s*$/i.exec(line);
+    if (definition) {
+      const key = referenceKey(definition[1]);
+      if (!references.has(key)) references.set(key, definition[2] ?? definition[3]);
+      definitions.add(index);
+    } else if (alias && !references.has(referenceKey(alias[1]))) {
+      references.set(referenceKey(alias[1]), alias[2]);
+    }
+  }
+  return definitions;
+}
+
+function inlineLink(node, token) {
+  const link = /^(!?)\[([^\]]*)\](?:\((?:<([^>]+)>|([^\s)]+))(?:\s+"[^"]*")?\)|\[([^\]]*)\])?$/.exec(token);
+  if (!link) return false;
+  const destination = link[3] ?? link[4] ?? references.get(referenceKey(link[5] || link[2]));
+  if (!destination) return false;
+  const image = Boolean(link[1]);
+  const element = document.createElement(image ? 'img' : 'a');
+  element.setAttribute(image ? 'src' : 'href', destination);
+  if (image) element.alt = link[2];
+  else element.textContent = link[2];
+  node.append(element);
+  return true;
+}
+function htmlSlot(node, html) {
+  node.append(document.createComment('preview-html:' + rawHtml.push(html)));
+}
+
+function inlineText(node, text) {
+  const tokens = /(\x60[^\x60]+\x60|\*\*[^*]+\*\*|\*[^*]+\*|!?\[[^\]]*\](?:\((?:<[^>]+>|[^\s)]+)(?:\s+"[^"]*")?\)|\[[^\]]*\])?|<\/?[a-z][a-z\d:-]*(?:\s+(?:"[^"]*"|'[^']*'|[^'"<>])*)?\/?>)/gi;
+  let offset = 0;
+  for (const match of text.matchAll(tokens)) {
+    const token = match[0];
+    node.append(text.slice(offset, match.index));
+    let element;
+    if (token.startsWith('<')) {
+      htmlSlot(node, token);
+      offset = match.index + token.length;
+      continue;
+    }
+    if (token.startsWith('[') || token.startsWith('![')) {
+      if (!inlineLink(node, token)) node.append(token);
+      offset = match.index + token.length;
+      continue;
+    } else {
+      const strong = token.startsWith('**');
+      const trim = strong ? 2 : 1;
+      element = document.createElement(strong ? 'strong' : token.startsWith('*') ? 'em' : 'code');
+      element.textContent = token.slice(trim, -trim);
+    }
+    node.append(element);
+    offset = match.index + token.length;
+  }
+  node.append(text.slice(offset));
+}
+
+function tableCells(line) {
+  return line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '')
+    .split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, '|'));
+}
+
+function renderTable(lines, index, output) {
+  const header = lines[index];
+  const rule = lines[index + 1];
+  if (!header.includes('|') || !rule) return index;
+  const titles = tableCells(header);
+  const markers = tableCells(rule);
+  if (titles.length !== markers.length || !markers.every(cell => /^:?-+:?$/.test(cell))) {
+    return index;
+  }
+  const wrapper = document.createElement('div');
+  wrapper.className = 'md-table';
+  const table = document.createElement('table');
+  wrapper.append(table);
+  const alignments = markers.map(mark => mark.endsWith(':')
+    ? (mark.startsWith(':') ? 'center' : 'right') : 'left');
+
+  function addRow(section, cells, tag) {
+    const row = section.insertRow();
+    titles.forEach((_, column) => {
+      const cell = document.createElement(tag);
+      cell.style.textAlign = alignments[column];
+      if (tag === 'th') cell.scope = 'col';
+      inlineText(cell, cells[column] ?? '');
+      row.append(cell);
+    });
+  }
+
+  addRow(table.createTHead(), titles, 'th');
+  const body = table.createTBody();
+  let last = index + 1;
+  while (lines[last + 1]?.includes('|') && !/^\s*(?:#{1,6}\s|>\s?)/.test(lines[last + 1])) {
+    addRow(body, tableCells(lines[++last]), 'td');
+  }
+  output.append(wrapper);
+  return last;
+}
+
+function renderMarkdown(source) {
+  rawHtml = [];
+  references = new Map();
+  const output = document.createElement('div');
+  let fence, code, list, paragraph;
+  const lines = source.replace(/^\uFEFF/, '').split(/\r\n?|\n/);
+  const definitions = collectReferences(lines);
+  for (let index = 0; index < lines.length; index++) {
+    if (definitions.has(index)) continue;
+    const line = lines[index];
+    const marker = /^\s*(\x60{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length &&
+          !line.slice(marker[0].length).trim()) {
+        fence = undefined;
+      } else {
+        code.append(line + '\n');
+      }
+      continue;
+    }
+    const block = /^ {0,3}<(address|article|aside|blockquote|details|dialog|div|dl|fieldset|figure|footer|form|h[1-6]|header|main|nav|ol|p|pre|section|style|summary|table|ul)(?=[\s/>])/i.exec(line);
+    const fullPage = /^ {0,3}<(?:!doctype\s+html|html)(?=[\s>])/i.test(line);
+    if (!marker && (block || fullPage)) {
+      const tag = fullPage ? 'html' : block[1];
+      const closing = new RegExp('</' + tag + '\\s*>', 'i');
+      const start = index;
+      const end = lines.findIndex((candidate, position) => position >= start && closing.test(candidate));
+      if (end >= start) index = end;
+      htmlSlot(output, lines.slice(start, index + 1).join('\n'));
+      paragraph = list = undefined;
+      continue;
+    }
+    const tableEnd = marker ? index : renderTable(lines, index, output);
+    if (tableEnd > index) {
+      index = tableEnd;
+      paragraph = list = undefined;
+      continue;
+    }
+    const item = /^\s*(?:([-+*])|(\d+)[.)])\s+(.+)$/.exec(line);
+    if (item) {
+      paragraph = undefined;
+      const tag = item[2] ? 'OL' : 'UL';
+      if (list?.tagName !== tag) {
+        list = document.createElement(tag);
+        if (item[2]) list.start = Number(item[2]);
+        output.append(list);
+      }
+      const li = document.createElement('li');
+      inlineText(li, item[3]);
+      list.append(li);
+      continue;
+    }
+    list = undefined;
+    const heading = /^ {0,3}(#{1,6})[ \t]+(.+)$/.exec(line);
+    if (/^ {0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$/.test(line)) {
+      output.append(document.createElement('hr'));
+      paragraph = undefined;
+      continue;
+    }
+    const quote = /^\s*>\s?(.*)$/.exec(line);
+    if (marker || heading || quote || !line.trim()) paragraph = undefined;
+    if (marker) {
+      fence = marker[1];
+      const pre = document.createElement('pre');
+      code = document.createElement('code');
+      pre.append(code);
+      output.append(pre);
+    } else if (heading || quote) {
+      const block = document.createElement(heading ? 'h' + heading[1].length : 'blockquote');
+      inlineText(block, heading ? heading[2].replace(/[ \t]+#+[ \t]*$/, '') : quote[1]);
+      output.append(block);
+    } else if (line.trim()) {
+      if (paragraph) paragraph.append(' ');
+      else {
+        paragraph = document.createElement('p');
+        output.append(paragraph);
+      }
+      inlineText(paragraph, line.trim());
+    }
+  }
+  return output.innerHTML.replace(/<!--preview-html:(\d+)-->/g, (_, index) => rawHtml[Number(index) - 1]);
+}
+
+async function followDocumentLink(event, baseTrail) {
+  const anchor = event.target.closest('a[href], area[href]');
+  if (!anchor) return;
+  event.preventDefault();
+  const href = anchor.getAttribute('href').trim();
+  if (!href) return;
+  try {
+    if (href.startsWith('#')) {
+      anchor.ownerDocument.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
+      return;
+    }
+    if (/^(?:https?:|mailto:|\/\/)/i.test(href)) {
+      window.open(href.startsWith('//') ? 'https:' + href : href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (/^[a-z][a-z\d+.-]*:/i.test(href)) return;
+    const [path, fragment] = href.split('#', 2);
+    const {entry, targetTrail} = await resolveLibraryFile(path, baseTrail);
+    if (!entry) throw new Error('File unavailable');
+    const name = entry.name;
+    const button = document.createElement('button');
+    if (/\.pdf$/i.test(name)) await openPdf(entry, button);
+    else if (isHtml(name) || isMarkdown(name)) {
+      await openWebDocument(entry, button, isMarkdown(name), targetTrail, fragment);
+    } else throw new Error('Unsupported file');
+  } catch (error) {
+    status.textContent = '링크에 연결된 문서를 열 수 없습니다.';
+  }
+}
+
+async function resolveLibraryFile(path, baseTrail) {
+  const parts = path.split('?')[0].split('/').map(decodeURIComponent);
+  const name = parts.pop();
+  if (!name || parts.some(part => /[\\/]/.test(part))) return {};
+  let targetTrail = path.startsWith('/') ? baseTrail.slice(0, 1) : baseTrail.slice();
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (targetTrail.length > 1) targetTrail.pop();
+      continue;
+    }
+    const child = await findEntry(targetTrail.at(-1), part, 'directory');
+    if (!child) throw new Error('Folder unavailable');
+    targetTrail.push(child);
+  }
+  const entry = await findEntry(targetTrail.at(-1), name, 'file');
+  if (!entry) throw new Error('File unavailable');
+  return {entry, targetTrail};
+}
+
+async function prepareMarkdownImages(html, baseTrail) {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  await Promise.all(Array.from(template.content.querySelectorAll('img[src]'), async image => {
+    const source = image.getAttribute('src').trim();
+    if (/^(?:https?:|data:image\/|\/\/)/i.test(source)) return;
+    image.removeAttribute('srcset');
+    image.removeAttribute('src');
+    try {
+      if (!source || /^[a-z][a-z\d+.-]*:/i.test(source)) return;
+      const {entry} = await resolveLibraryFile(source.split('#')[0], baseTrail);
+      if (!entry || !isImage(entry.name)) return;
+      const response = entry.url ? await fetch(entry.url) : null;
+      if (response && !response.ok) return;
+      const blob = response ? await response.blob() : await entry.getFile();
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      image.setAttribute('src', data);
+    } catch (error) {
+      image.title = '이미지를 불러올 수 없습니다.';
+    }
+  }));
+  return template.innerHTML;
+}
+
+async function findEntry(folder, name, kind) {
+  for await (const entry of (await folder.values())) {
+    if (entry.name === name && entry.kind === kind) return entry;
+  }
+}
+
+async function openWebDocument(entry, button, isMarkdownDocument = false, baseTrail = trail, fragment) {
+  clearPreview();
+  const request = previewRequest;
+  status.textContent = '';
+  try {
+    const response = entry.url ? await fetch(entry.url) : await entry.getFile();
+    if (entry.url && !response.ok) throw new Error('Markdown unavailable');
+    const source = await response.text();
+    if (request !== previewRequest) return;
+    const page = isMarkdownDocument
+      ? '<style>body{margin:16px;font:16px system-ui,sans-serif}' + markdownStyles + '</style>'
+        + '<main id="markdown" style="display:block;padding:0">' + await prepareMarkdownImages(renderMarkdown(source), baseTrail) + '</main>'
+      : source.replace(/^\s*<!doctype[^>]*>/i, '');
+    if (request !== previewRequest) return;
+    webViewer.onload = () => {
+      const doc = webViewer.contentDocument;
+      if (!doc) return;
+      const ids = new Set(Array.from(doc.querySelectorAll('[id]'), node => node.id));
+      for (const heading of doc.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+        if (heading.id) continue;
+        const base = heading.textContent.trim().toLowerCase()
+          .replace(/[^\p{L}\p{M}\p{N}_\s-]/gu, '').replace(/\s/g, '-');
+        if (!base) continue;
+        let id = base, count = 0;
+        while (ids.has(id)) id = base + '-' + ++count;
+        heading.id = id;
+        ids.add(id);
+      }
+      doc.addEventListener('click', event => followDocumentLink(event, baseTrail));
+      if (fragment) {
+        try { doc.getElementById(decodeURIComponent(fragment))?.scrollIntoView(); }
+        catch (error) { status.textContent = '문서 내 위치를 확인할 수 없습니다.'; }
+      }
+    };
+    webViewer.srcdoc = '<!doctype html><meta charset="utf-8">' + previewPolicy + page;
+    webViewer.hidden = false;
+    byId('hint').hidden = true;
+    byId('title').textContent = entry.name;
+    button.setAttribute('aria-current', 'true');
+  } catch (error) {
+    if (request === previewRequest) status.textContent = '문서 파일을 열 수 없습니다.';
+  }
+}
+
+function importedFolder(name) {
+  const entries = new Map();
+  return { name, entries, kind: 'directory', values: () => entries.values() };
+}
+
+upload.onchange = () => {
+  const selected = Array.from(upload.files);
+  upload.value = '';
+  if (!selected.length) return;
+  const root = importedFolder(selected[0].webkitRelativePath.split('/')[0]);
+  for (const file of selected) {
+    const parts = file.webkitRelativePath.split('/').slice(1);
+    const filename = parts.pop();
+    let folder = root;
+    for (const name of parts) {
+      if (!folder.entries.has(name)) folder.entries.set(name, importedFolder(name));
+      folder = folder.entries.get(name);
+    }
+    folder.entries.set(filename, { name: filename, kind: 'file', getFile: () => file });
+  }
+  show([root]);
+};
+
+pick.onclick = async () => {
+  if (!window.showDirectoryPicker) {
+    upload.click();
+    return;
+  }
+  try {
+    const root = await window.showDirectoryPicker({mode:'read'});
+    await show([root]);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    status.textContent = '폴더 선택 권한을 확인하거나 다시 선택해 주세요.';
+    upload.click();
+  }
+};
+back.onclick = () => {
+  if (trail.length > 1) show(trail.slice(0, -1));
+};
+function serverFolder(name, path) {
+  return {
+    name,
+    kind: 'directory',
+    async values() {
+      const response = await fetch('/api/folder?' + new URLSearchParams({path}));
+      if (!response.ok) throw new Error('Folder unavailable');
+      const data = await response.json();
+      if (!path) this.name = data.root;
+      return data.entries.map(entry => {
+        const childPath = path ? path + '/' + entry.name : entry.name;
+        if (entry.kind === 'directory') return serverFolder(entry.name, childPath);
+        const route = isMarkdown(entry.name) ? 'markdown' : isHtml(entry.name) ? 'html' : isImage(entry.name) ? 'image' : 'pdf';
+        return { ...entry, url: '/api/' + route + '?' + new URLSearchParams({path: childPath}) };
+      });
+    }
+  };
+}
+if (location.protocol === 'http:' && location.hostname === '127.0.0.1') {
+  show([serverFolder('자료 폴더', '')]);
+} else {
+  status.textContent = '현재 폴더를 자동으로 표시하려면 start-pdf-library.cmd를 실행하세요. 이 화면에서는 자료 폴더를 직접 선택할 수 있습니다.';
+}
+
+</script>
+</body>
+</html>
+

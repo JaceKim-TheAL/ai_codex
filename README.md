@@ -1,5 +1,17 @@
 # ai_codex
-AI Auto Generator Coding by Codex
+
+## Vibe Coding Assets
+
+구분 | 프로그램명 | 설명      | 실행 
+:--:|-----------|----------|:------:
+🟥 | G01_자동완성_prompt | AI프로필 사진 프롬프트 메이커 | [실행](https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_profile_maker.html)
+🟥 | G02_자동완성_prompt | AI광고제작 포트폴리오 프롬프트 메이커 | [실행](https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_portfolio_maker.html)
+🟦 | L01_자료실_viewer | 문서파일 - PDF, HTML, MD 파일 보기   | [실행](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_docs_v8.html)
+🟦 | L02_자료실_viewer | 미디어파일 - 이미지 & 동영상          | [실행](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_media_v8.html)
+
+
+---
+## AI Auto Generator Coding by Codex
 
 - [Codex 소개](https://chatgpt.com/ko-KR/codex/)
 - [Codex 실행](https://chatgpt.com/ko-KR/)
