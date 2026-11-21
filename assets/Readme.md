@@ -11,12 +11,17 @@
 
 ### Auto Prompt Generator
 
-- [메이커-PROFILE](https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_profile_maker.html)
+- [메이커-PORTFOLIO](https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_portfolio_maker.html) : 
+  AI 광고제작 포트폴리오 메이커, 이미지/동영상
+- [메이커-PROFILE](https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_profile_maker.html) : 
+  AI 프로필사진 메이커, 이미지
 
 ### Library Viewer
 
-- [자료실-MEIDA](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_media_v8.html)
-- [자료실-DOCUMENT](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_docs_v8.html)
+- [자료실-MEIDA](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_media_v8.html) :
+  이미지/동영상 뷰어
+- [자료실-DOCUMENT](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_docs_v8.html) :
+  PDF, HTML, MD(MarkDown)
 
 <!-- 
 ![GEN_PROFILE]: https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_profile_maker.html
