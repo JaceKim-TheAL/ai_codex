@@ -10,12 +10,14 @@
 
 ### Library Viewer
 
-- [자료실-MEIDA][LIB_MEDIA]
-- [자료실-DOCUMENT][LIB_DOCS]
+- [자료실-MEIDA](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_media_v8.html)
+- [자료실-DOCUMENT](https://jacekim-theal.github.io/ai_codex/assets/viewer/library_docs_v8.html)
 
+<!-- 
 ![GEN_PROFILE]: https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_profile_maker.html
 ![LIB_MEDIA]:   https://jacekim-theal.github.io/ai_codex/assets/viewer/library_media_v8.html
-![LIB_DOCS]:    https://jacekim-theal.github.io/ai_codex/assets/viewer/library_docs_v8.html
+![LIB_DOCS]:    https://jacekim-theal.github.io/ai_codex/assets/viewer/library_docs_v8.html 
+-->
 
 ---
 ### Github 의 HTML 문서 공유
