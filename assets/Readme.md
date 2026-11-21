@@ -5,6 +5,7 @@
 
 ### Auto Prompt Generator
 
+- [메이커-PROFILE](https://jacekim-theal.github.io/ai_codex/assets/autogen/prompt_profile_maker.html)
 - [메이커-PROFILE][GEN_PROFILE]
 
 ### Library Viewer
